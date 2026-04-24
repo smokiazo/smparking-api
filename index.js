@@ -22,6 +22,31 @@ const pool = mysql.createPool({
 // TEST ROUTE: Check if the bridge is alive
 app.get('/', (req, res) => res.send("SMPARKING Bridge is Running"));
 
+// REGISTER: Add user to TiDB
+app.post('/register', (req, res) => {
+    const { user_fullname, user_email, user_phone, password } = req.body;
+    const sql = "INSERT INTO Users (user_fullname, user_email, user_phone, passwordHASH) VALUES (?, ?, ?, ?)";
+    // Note: You should hash the password here for security
+    pool.query(sql, [user_fullname, user_email, user_phone, password], (err, result) => {
+        if (err) return res.status(500).json({ success: false, message: err.message });
+        res.json({ success: true, message: "User registered successfully" });
+    });
+});
+
+// LOGIN: Match user data
+app.post('/login', (req, res) => {
+    const { user_email, password } = req.body;
+    const sql = "SELECT * FROM Users WHERE user_email = ? AND passwordHASH = ?";
+    pool.query(sql, [user_email, password], (err, results) => {
+        if (err) return res.status(500).json({ success: false, message: err.message });
+        if (results.length > 0) {
+            res.json({ success: true, user: results[0] });
+        } else {
+            res.json({ success: false, message: "Invalid email or password" });
+        }
+    });
+});
+
 // CHECK-IN: Create transaction and generate SM-CAB code
 app.post('/check-in', (req, res) => {
     const { plate_number, slot_id, user_id, is_pwd } = req.body;
