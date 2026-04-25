@@ -62,24 +62,23 @@ app.post('/login', (req, res) => {
     });
 });
 
-// 3. CHECK-IN (Simplified to avoid 500 error)
+// 3. CHECK-IN: Create transaction (Slot ID assigned later by Admin)
 app.post('/check-in', (req, res) => {
-    const { plate_number, slot_id, user_id, is_pwd } = req.body;
+    const { plate_number, user_id, is_pwd } = req.body;
 
     // Generate code manually before insert to satisfy NOT NULL constraint
     const refCode = `SMCAB-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    const sql = "INSERT INTO ParkingTransactions (reference_code, plate_number, slot_id, user_id, is_pwd, entry_time, payment_status, fee_amount) VALUES (?, ?, ?, ?, ?, NOW(), 'UNPAID', 50.00)";
+    // NOTE: slot_id is left as NULL because the Admin app will assign it later
+    const sql = "INSERT INTO ParkingTransactions (reference_code, plate_number, user_id, is_pwd, entry_time, payment_status, fee_amount) VALUES (?, ?, ?, ?, NOW(), 'UNPAID', 50.00)";
 
-    pool.query(sql, [refCode, plate_number, slot_id, user_id || null, is_pwd || 0], (err, result) => {
+    pool.query(sql, [refCode, plate_number, user_id || null, is_pwd || 0], (err, result) => {
         if (err) {
             console.error("Check-in Error:", err.message);
             return res.status(500).json({ success: false, error: err.message });
         }
 
-        // Update slot status
-        pool.query("UPDATE ParkingSlots SET status = 'Occupied' WHERE slot_id = ?", [slot_id]);
-
+        // No ParkingSlots update here; Admin handled
         res.json({ success: true, reference_code: refCode, transaction_id: result.insertId });
     });
 });
