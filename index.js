@@ -66,25 +66,36 @@ app.post('/login', (req, res) => {
 app.post('/check-in', (req, res) => {
     const { plate_number, user_id, is_pwd } = req.body;
 
-    // Generate code manually before insert to satisfy NOT NULL constraint
-    const refCode = `SMCAB-${Math.floor(100000 + Math.random() * 900000)}`;
+    // Check for active transaction (where exit_time is NULL)
+    const checkSql = "SELECT * FROM ParkingTransactions WHERE user_id = ? AND exit_time IS NULL";
+    pool.query(checkSql, [user_id], (err, results) => {
+        if (err) return res.status(500).json({ success: false, error: err.message });
 
-    // NOTE: slot_id is left as NULL because the Admin app will assign it later
-    const sql = "INSERT INTO ParkingTransactions (reference_code, plate_number, user_id, is_pwd, entry_time, payment_status, fee_amount) VALUES (?, ?, ?, ?, NOW(), 'UNPAID', 50.00)";
-
-    pool.query(sql, [refCode, plate_number, user_id || null, is_pwd || 0], (err, result) => {
-        if (err) {
-            console.error("Check-in Error:", err.message);
-            return res.status(500).json({ success: false, error: err.message });
+        if (results.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: "You have an active parking session. Please check out before starting a new one."
+            });
         }
 
-        // No ParkingSlots update here; Admin handled
-        res.json({ success: true, reference_code: refCode, transaction_id: result.insertId });
+        // Generate code manually before insert to satisfy NOT NULL constraint
+        const refCode = `SMCAB-${Math.floor(100000 + Math.random() * 900000)}`;
+
+        // NOTE: slot_id is left as NULL because the Admin app will assign it later
+        const sql = "INSERT INTO ParkingTransactions (reference_code, plate_number, user_id, is_pwd, entry_time, payment_status, fee_amount) VALUES (?, ?, ?, ?, NOW(), 'UNPAID', 50.00)";
+
+        pool.query(sql, [refCode, plate_number, user_id || null, is_pwd || 0], (err, result) => {
+            if (err) {
+                console.error("Check-in Error:", err.message);
+                return res.status(500).json({ success: false, error: err.message });
+            }
+
+            res.json({ success: true, reference_code: refCode, transaction_id: result.insertId });
+        });
     });
 });
 
 // 4. PAY TRANSACTION (Simulated)
-// FIX: We only update payment_status. exit_time should only be set by the Admin Gate app.
 app.post('/pay', (req, res) => {
     const { reference_code } = req.body;
     const sql = "UPDATE ParkingTransactions SET payment_status = 'PAID' WHERE reference_code = ?";
