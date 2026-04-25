@@ -64,7 +64,7 @@ app.post('/login', (req, res) => {
 
 // 3. CHECK-IN: Create transaction (Slot ID assigned later by Admin)
 app.post('/check-in', (req, res) => {
-    const { plate_number, user_id, is_pwd } = req.body;
+    const { plate_number, vehicle_type, user_id, is_pwd } = req.body;
 
     // Check for active transaction (where exit_time is NULL)
     const checkSql = "SELECT * FROM ParkingTransactions WHERE user_id = ? AND exit_time IS NULL";
@@ -82,9 +82,9 @@ app.post('/check-in', (req, res) => {
         const refCode = `SMCAB-${Math.floor(100000 + Math.random() * 900000)}`;
 
         // NOTE: slot_id is left as NULL because the Admin app will assign it later
-        const sql = "INSERT INTO ParkingTransactions (reference_code, plate_number, user_id, is_pwd, entry_time, payment_status, fee_amount) VALUES (?, ?, ?, ?, NOW(), 'UNPAID', 50.00)";
+        const sql = "INSERT INTO ParkingTransactions (reference_code, plate_number, vehicle_type, user_id, is_pwd, entry_time, payment_status, fee_amount) VALUES (?, ?, ?, ?, ?, ?, NOW(), 'UNPAID', 50.00)";
 
-        pool.query(sql, [refCode, plate_number, user_id || null, is_pwd || 0], (err, result) => {
+        pool.query(sql, [refCode, plate_number, vehicle_type || '4-Wheeler', user_id || null, is_pwd || 0], (err, result) => {
             if (err) {
                 console.error("Check-in Error:", err.message);
                 return res.status(500).json({ success: false, error: err.message });
