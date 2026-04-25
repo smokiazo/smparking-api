@@ -80,45 +80,79 @@ app.post('/login', (req, res) => {
 
 /**
  * 3. CHECK-IN: Create transaction and update slot status
- * Matches AssignActivity.java & 'ParkingTransactions' table
+ * Uses sequential queries for maximum reliability on TiDB
  */
 app.post('/check-in', (req, res) => {
     const { plate_number, slot_id, user_id, is_pwd } = req.body;
+    console.log("Check-in Request Received:", req.body);
 
     pool.getConnection((err, conn) => {
-        if (err) return res.status(500).json({ error: err.message });
+        if (err) {
+            console.error("Pool Connection Error:", err);
+            return res.status(500).json({ error: "Database connection failed" });
+        }
 
         conn.beginTransaction((err) => {
-            if (err) return res.status(500).json({ error: err.message });
+            if (err) {
+                conn.release();
+                console.error("Transaction Start Error:", err);
+                return res.status(500).json({ error: "Failed to start transaction" });
+            }
 
             // 1. Insert Transaction into ParkingTransactions
-            // FIX: reference_code is NOT NULL in database, so we must provide a temporary unique value
-            const tempCode = 'TEMP-' + Date.now();
+            // We use a temporary code because reference_code is UNIQUE and NOT NULL
+            const tempCode = `TEMP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
             const insertSql = "INSERT INTO ParkingTransactions (reference_code, plate_number, slot_id, user_id, is_pwd, entry_time, payment_status) VALUES (?, ?, ?, ?, ?, NOW(), 'UNPAID')";
 
             conn.query(insertSql, [tempCode, plate_number, slot_id, user_id || null, is_pwd || 0], (err, result) => {
-                if (err) return conn.rollback(() => {
-                    conn.release();
-                    console.error("Insert Error:", err);
-                    res.status(500).json({ error: err.message });
-                });
+                if (err) {
+                    return conn.rollback(() => {
+                        conn.release();
+                        console.error("Step 1: Insert Error:", err.message);
+                        res.status(500).json({ error: "Insert failed: " + err.message });
+                    });
+                }
 
                 const newId = result.insertId;
-                // Requested format: SMCAB-XXXXXX
+                // Official format: SMCAB-XXXXXX
                 const refCode = `SMCAB-${String(newId).padStart(6, '0')}`;
+                console.log(`Step 1 Success: Transaction ID ${newId}, generating ${refCode}`);
 
-                // 2. Update Reference Code and mark ParkingSlot as Occupied
-                const updateSql = "UPDATE ParkingTransactions SET reference_code = ? WHERE transaction_id = ?; UPDATE ParkingSlots SET status = 'OCCUPIED' WHERE slot_id = ?;";
+                // 2. Update Transaction with official Reference Code
+                const updateTransSql = "UPDATE ParkingTransactions SET reference_code = ? WHERE transaction_id = ?";
+                conn.query(updateTransSql, [refCode, newId], (err) => {
+                    if (err) {
+                        return conn.rollback(() => {
+                            conn.release();
+                            console.error("Step 2: Update Reference Error:", err.message);
+                            res.status(500).json({ error: "Reference code update failed" });
+                        });
+                    }
 
-                conn.query(updateSql, [refCode, newId, slot_id], (err) => {
-                    if (err) return conn.rollback(() => {
-                        conn.release();
-                        res.status(500).json({ error: err.message });
-                    });
+                    // 3. Mark ParkingSlot as OCCUPIED
+                    const updateSlotSql = "UPDATE ParkingSlots SET status = 'OCCUPIED' WHERE slot_id = ?";
+                    conn.query(updateSlotSql, [slot_id], (err) => {
+                        if (err) {
+                            return conn.rollback(() => {
+                                conn.release();
+                                console.error("Step 3: Update Slot Error:", err.message);
+                                res.status(500).json({ error: "Slot status update failed" });
+                            });
+                        }
 
-                    conn.commit(() => {
-                        conn.release();
-                        res.json({ success: true, reference_code: refCode, transaction_id: newId });
+                        // Success! Commit everything
+                        conn.commit((err) => {
+                            if (err) {
+                                return conn.rollback(() => {
+                                    conn.release();
+                                    console.error("Commit Error:", err);
+                                    res.status(500).json({ error: "Commit failed" });
+                                });
+                            }
+                            conn.release();
+                            console.log("Check-in Successful for", plate_number);
+                            res.json({ success: true, reference_code: refCode, transaction_id: newId });
+                        });
                     });
                 });
             });
