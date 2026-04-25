@@ -92,16 +92,20 @@ app.post('/check-in', (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
 
             // 1. Insert Transaction into ParkingTransactions
-            const insertSql = "INSERT INTO ParkingTransactions (plate_number, slot_id, user_id, is_pwd, entry_time, payment_status) VALUES (?, ?, ?, ?, NOW(), 'UNPAID')";
+            // FIX: reference_code is NOT NULL in database, so we must provide a temporary unique value
+            const tempCode = 'TEMP-' + Date.now();
+            const insertSql = "INSERT INTO ParkingTransactions (reference_code, plate_number, slot_id, user_id, is_pwd, entry_time, payment_status) VALUES (?, ?, ?, ?, ?, NOW(), 'UNPAID')";
 
-            conn.query(insertSql, [plate_number, slot_id, user_id || null, is_pwd || 0], (err, result) => {
+            conn.query(insertSql, [tempCode, plate_number, slot_id, user_id || null, is_pwd || 0], (err, result) => {
                 if (err) return conn.rollback(() => {
                     conn.release();
+                    console.error("Insert Error:", err);
                     res.status(500).json({ error: err.message });
                 });
 
                 const newId = result.insertId;
-                const refCode = `SM-CAB-${String(newId).padStart(6, '0')}`;
+                // Requested format: SMCAB-XXXXXX
+                const refCode = `SMCAB-${String(newId).padStart(6, '0')}`;
 
                 // 2. Update Reference Code and mark ParkingSlot as Occupied
                 const updateSql = "UPDATE ParkingTransactions SET reference_code = ? WHERE transaction_id = ?; UPDATE ParkingSlots SET status = 'OCCUPIED' WHERE slot_id = ?;";
