@@ -82,7 +82,8 @@ app.post('/check-in', (req, res) => {
         const refCode = `SMCAB-${Math.floor(100000 + Math.random() * 900000)}`;
 
         // NOTE: slot_id is left as NULL because the Admin app will assign it later
-        const sql = "INSERT INTO ParkingTransactions (reference_code, plate_number, vehicle_type, user_id, is_pwd, entry_time, payment_status, fee_amount) VALUES (?, ?, ?, ?, ?, ?, NOW(), 'UNPAID', 50.00)";
+        // FIX: Fixed syntax error by matching placeholders to columns
+        const sql = "INSERT INTO ParkingTransactions (reference_code, plate_number, vehicle_type, user_id, is_pwd, entry_time, payment_status, fee_amount) VALUES (?, ?, ?, ?, ?, NOW(), 'UNPAID', 50.00)";
 
         pool.query(sql, [refCode, plate_number, vehicle_type || '4-Wheeler', user_id || null, is_pwd || 0], (err, result) => {
             if (err) {
@@ -141,5 +142,5 @@ app.post('/update-profile', (req, res) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000; 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
