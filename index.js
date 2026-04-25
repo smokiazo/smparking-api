@@ -23,6 +23,14 @@ const pool = mysql.createPool({
 // Root Route
 app.get('/', (req, res) => res.send("SMPARKING Bridge is Running"));
 
+// 0. DEBUG: Test DB Connection and Schema
+app.get('/test-db', (req, res) => {
+    pool.query("SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ?", [process.env.DB_NAME], (err, results) => {
+        if (err) return res.status(500).json({ success: false, error: err.message, stack: err.stack });
+        res.json({ success: true, message: "Connection Healthy", schema: results });
+    });
+});
+
 // 1. REGISTER
 app.post('/register', (req, res) => {
     const { user_fullname, user_email, user_phone, password } = req.body;
