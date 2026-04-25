@@ -84,9 +84,10 @@ app.post('/check-in', (req, res) => {
 });
 
 // 4. PAY TRANSACTION (Simulated)
+// FIX: We only update payment_status. exit_time should only be set by the Admin Gate app.
 app.post('/pay', (req, res) => {
     const { reference_code } = req.body;
-    const sql = "UPDATE ParkingTransactions SET payment_status = 'PAID', exit_time = NOW() WHERE reference_code = ?";
+    const sql = "UPDATE ParkingTransactions SET payment_status = 'PAID' WHERE reference_code = ?";
     pool.query(sql, [reference_code], (err, result) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
         res.json({ success: true, message: "Payment successful" });
