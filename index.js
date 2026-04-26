@@ -126,6 +126,20 @@ app.get('/transaction/:reference_code', (req, res) => {
 });
 
 /**
+ * 7. SUBMIT REPORT: Save issues to UserReports table
+ */
+app.post('/submit-report', (req, res) => {
+    const { subject, details } = req.body;
+    // status and created_at have default values in DB
+    const sql = "INSERT INTO UserReports (subject, details) VALUES (?, ?)";
+
+    pool.query(sql, [subject, details], (err) => {
+        if (err) return res.status(500).json({ success: false, message: err.message });
+        res.json({ success: true, message: "Report submitted successfully" });
+    });
+});
+
+/**
  * 8. UPDATE PROFILE: Update user details in TiDB
  */
 app.post('/update-profile', (req, res) => {
@@ -142,5 +156,5 @@ app.post('/update-profile', (req, res) => {
     });
 });
 
-const PORT = process.env.PORT || 3000; 
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
