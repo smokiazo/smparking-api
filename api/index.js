@@ -34,10 +34,38 @@ app.get('/test-db', (req, res) => {
 // 1. REGISTER
 app.post('/register', (req, res) => {
     const { user_fullname, user_email, user_phone, password } = req.body;
-    const sql = "INSERT INTO Users (user_fullname, user_email, user_phone, passwordHASH) VALUES (?, ?, ?, ?)";
-    pool.query(sql, [user_fullname, user_email, user_phone, password], (err) => {
+
+    // 1. Check if the email is already in use
+    const checkUserSql = "SELECT user_id FROM Users WHERE user_email = ?";
+    
+    pool.query(checkUserSql, [user_email], async (err, results) => {
         if (err) return res.status(500).json({ success: false, message: err.message });
-        res.json({ success: true, message: "Account created successfully" });
+
+        // If results length is > 0, the email is already registered
+        if (results.length > 0) {
+            return res.status(409).json({ 
+                success: false, 
+                message: "An account with this email already exists." 
+            });
+        }
+
+        try {
+            // 2. Hash the password before saving (Fixes login compatibility)
+            const saltRounds = 10;
+            const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+            // 3. Insert the new user
+            const insertSql = "INSERT INTO Users (user_fullname, user_email, user_phone, passwordHASH) VALUES (?, ?, ?, ?)";
+            
+            pool.query(insertSql, [user_fullname, user_email, user_phone, hashedPassword], (insertErr) => {
+                if (insertErr) return res.status(500).json({ success: false, message: insertErr.message });
+                
+                res.status(201).json({ success: true, message: "Account created successfully" });
+            });
+        } catch (hashError) {
+            console.error("Hashing Error:", hashError);
+            res.status(500).json({ success: false, message: "Error securing password." });
+        }
     });
 });
 
